@@ -1,0 +1,173 @@
+﻿@page "/cars"
+@rendermode InteractiveServer
+@inject ICarRepository CarRepository
+
+<PageTitle>Autók</PageTitle>
+<div class="d-flex flex-column justify-content-center rounded-2 bg-light p-2">
+    <h1>Autók</h1>
+
+    @if (cars is null)
+    {
+        <div>
+            <h4>Töltés...</h4>
+        </div>
+    }
+    else if (cars.Count == 0)
+    {
+        <div>
+            <h4>Nincs autó a listában.</h4>
+        </div>
+    }
+    else
+    {
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Márka</th>
+                    <th>Típus</th>
+                    <th>Rendszám</th>
+                    <th>Gyártási dátum</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var car in cars)
+                {
+                    <tr>
+                        <td>@car.CarID</td>
+                        <td>@car.Brand</td>
+                        <td>@car.Model</td>
+                        <td>@car.RegistrationNumber</td>
+                        <td>@DateOnly.FromDateTime(car.ProductionDate)</td>
+                        <td><button class="btn btn-primary" @onclick="() => OpenUpdateDialog(car)">Módosít</button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+    <div>
+        <button class="btn btn-primary" @onclick="()=>AddNewCarDialog?.Open()">Új autó</button>
+    </div>
+</div>
+
+<ModalDialog @ref="@UpdateCarDialog" Title="Autó módosítás">
+    <form method="post" @onsubmit="UpdateCarAsync" @formname="update-car-form">
+        <AntiforgeryToken />
+        <div>
+            <h6>Id:<span>@CarToUpdate!.CarID</span></h6>
+        </div>
+        <div class="mb-1">
+            <label>
+                Márka:
+                <InputText @bind-Value="CarToUpdate!.Brand" />
+            </label>
+        </div>
+        <div class="mb-1">
+            <label>
+                Típus:
+                <InputText @bind-Value="CarToUpdate!.Model" />
+            </label>
+        </div>
+        <div class="mb-1">
+            <label>
+                Rendszám:
+                <InputText @bind-Value="CarToUpdate!.RegistrationNumber" />
+            </label>
+        </div>
+        <div>
+            <label>
+                Gyártási dátum:
+                <InputDate @bind-Value="CarToUpdate!.ProductionDate" />
+            </label>
+        </div>
+        <hr />
+        <div>
+            <button class="btn btn-primary" type="submit">Rendben</button>
+        </div>
+    </form>
+</ModalDialog>
+
+<ModalDialog @ref="@AddNewCarDialog" Title="Új autó felvitele">
+    <form method="post" @onsubmit="RegisterNewCarAsync" @formname="new-car-form">
+        <AntiforgeryToken />
+        <div class="mb-1">
+            <label>
+                Márka:
+                <InputText @bind-Value="NewCar!.Brand" />
+            </label>
+        </div>
+        <div class="mb-1">
+            <label>
+                Típus:
+                <InputText @bind-Value="NewCar!.Model" />
+            </label>
+        </div>
+        <div class="mb-1">
+            <label>
+                Rendszám:
+                <InputText @bind-Value="NewCar!.RegistrationNumber" />
+            </label>
+        </div>
+        <div>
+            <label>
+                Gyártási dátum:
+                <InputDate @bind-Value="NewCar!.ProductionDate" />
+            </label>
+        </div>
+        <hr />
+        <div>
+            <button class="btn btn-primary" type="submit">Rendben</button>
+        </div>
+    </form>
+</ModalDialog>
+
+@code {
+    private List<Car>? cars;
+
+    private ModalDialog? UpdateCarDialog;
+    [SupplyParameterFromForm]
+    private Car? CarToUpdate { get; set; }
+
+    private ModalDialog? AddNewCarDialog;
+    [SupplyParameterFromForm]
+    private Car? NewCar { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        NewCar = new();
+        CarToUpdate = new();
+        await GetAllCarsAsync();
+    }
+
+    private async Task GetAllCarsAsync()
+    {
+        var carsResult = await CarRepository.GetAllCarsAsync();
+        cars = carsResult.ToList();
+    }
+
+    private void OpenUpdateDialog(Car carToUpdate)
+    {
+        CarToUpdate = carToUpdate;
+        UpdateCarDialog?.Open();
+    }
+
+    private async Task UpdateCarAsync()
+    {
+        await CarRepository.UpdateCarAsync(CarToUpdate!);
+        await GetAllCarsAsync();
+        CarToUpdate = new();
+        UpdateCarDialog?.Close();
+    }
+
+    private async Task RegisterNewCarAsync()
+    {
+        if (NewCar is not null)
+        {
+            await CarRepository.RegisterNewCarAsync(NewCar);
+            await GetAllCarsAsync();
+            NewCar = new();
+        }
+
+        AddNewCarDialog?.Close();
+    }
+}

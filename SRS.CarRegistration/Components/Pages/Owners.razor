@@ -1,0 +1,262 @@
+﻿@page "/owners"
+@rendermode InteractiveServer
+@inject IOwnerRepository OwnerRepository
+@inject ICarRepository CarRepository
+
+<PageTitle>Tulajdonosok</PageTitle>
+<div class="d-flex flex-column justify-content-center rounded-2 bg-light p-2">
+    <h1>Tulajdonosok</h1>
+
+    @if (owners is null)
+    {
+        <div>
+            <h4>Töltés...</h4>
+        </div>
+    }
+    else if (owners.Count == 0)
+    {
+        <div>
+            <h4>Nincs tulajdonos a listában.</h4>
+        </div>
+    }
+    else
+    {
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Vezetéknév</th>
+                    <th>Keresztnév</th>
+                    <th>Születési dátum</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var owner in owners)
+                {
+                    <tr>
+                        <td>@owner.OwnerID</td>
+                        <td>@owner.LastName</td>
+                        <td>@owner.FirstName</td>
+                        <td>@DateOnly.FromDateTime(owner.BirthDate)</td>
+                        <td><button class="btn btn-primary" @onclick="() => OpenUpdateDialog(owner)">Módosít</button></td>
+                        <td><button class="btn btn-primary" @onclick="() => GetCarsByOwnerAsync(owner.OwnerID)">Autók</button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+    <div>
+        <button class="btn btn-primary" @onclick="()=>AddNewOwnerDialog?.Open()">Új tulajdonos</button>
+    </div>
+</div>
+
+<ModalDialog @ref="@CarsOfOwnerDialog" Title="A tulajdonos autói">
+    @if (CarsOfOwner is null)
+    {
+        <div>
+            <h6>Töltés...</h6>
+        </div>
+    }
+    else if (CarsOfOwner.Count == 0)
+    {
+        <div>
+            <h6>Nincs autó a listában</h6>
+        </div>
+    }
+    else
+    {
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Márka</th>
+                    <th>Típus</th>
+                    <th>Rendszám</th>
+                    <th>Gyártási dátum</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var car in CarsOfOwner)
+                {
+                    <tr>
+                        <td>@car.CarID</td>
+                        <td>@car.Brand</td>
+                        <td>@car.Model</td>
+                        <td>@car.RegistrationNumber</td>
+                        <td>@DateOnly.FromDateTime(car.ProductionDate)</td>
+                        <td><button class="btn btn-primary" @onclick="() => RemoveCarFromOwnerAsync(ActualOwnerID, car.CarID)">Töröl</button></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+    <hr />
+    <div>
+        <h5>Autó hozzáadása:</h5>
+        @if (cars is null)
+        {
+            <div>
+                <h6>Töltés...</h6>
+            </div>
+        }
+        else if (cars.Count == 0)
+        {
+            <div>
+                <h6>Nincs autó a listában</h6>
+            </div>
+        }
+        else
+        {
+            <InputSelect id="department" @bind-Value="SelectedCarID">
+                @foreach (var car in cars)
+                {
+                    <option value="@car.CarID">@car.RegistrationNumber</option>
+                }
+            </InputSelect>
+        }
+        <button class="btn btn-primary ms-2" @onclick="() => AddCarToOwnerAsync(ActualOwnerID, SelectedCarID)">Hozzáad</button>
+    </div>
+</ModalDialog>
+
+<ModalDialog @ref="@UpdateOwnerDialog" Title="Tulajdonos módosítás">
+    <form method="post" @onsubmit="UpdateOwnerAsync" @formname="update-owner-form">
+        <AntiforgeryToken />
+        <div>
+            <h6>Id:<span>@OwnerToUpdate!.OwnerID</span></h6>
+        </div>
+        <div class="mb-1">
+            <label>
+                Vezetéknév:
+                <InputText @bind-Value="OwnerToUpdate!.LastName" />
+            </label>
+        </div>
+        <div class="mb-1">
+            <label>
+                Keresztnév:
+                <InputText @bind-Value="OwnerToUpdate!.FirstName" />
+            </label>
+        </div>
+        <div>
+            <label>
+                Születési dátum:
+                <InputDate @bind-Value="OwnerToUpdate!.BirthDate" />
+            </label>
+        </div>
+        <hr />
+        <div>
+            <button class="btn btn-primary" type="submit">Rendben</button>
+        </div>
+    </form>
+</ModalDialog>
+
+<ModalDialog @ref="@AddNewOwnerDialog" Title="Új tulajdonos felvitele">
+    <form method="post" @onsubmit="RegisterNewOwnerAsync" @formname="new-owner-form">
+        <AntiforgeryToken />
+        <div class="mb-1">
+            <label>
+                Vezetéknév:
+                <InputText @bind-Value="NewOwner!.LastName" />
+            </label>
+        </div>
+        <div class="mb-1">
+            <label>
+                Keresztnév:
+                <InputText @bind-Value="NewOwner!.FirstName" />
+            </label>
+        </div>
+        <div>
+            <label>
+                Születési dátum:
+                <InputDate @bind-Value="NewOwner!.BirthDate" />
+            </label>
+        </div>
+        <hr />
+        <div>
+            <button class="btn btn-primary" type="submit">Rendben</button>
+        </div>
+    </form>
+</ModalDialog>
+
+@code {
+    private List<Owner>? owners;
+    private List<Car>? cars;
+
+    private ModalDialog? CarsOfOwnerDialog;
+    private List<Car>? CarsOfOwner;
+    private int ActualOwnerID;
+    private int SelectedCarID;
+
+    private ModalDialog? UpdateOwnerDialog;
+    [SupplyParameterFromForm]
+    private Owner? OwnerToUpdate { get; set; }
+
+    private ModalDialog? AddNewOwnerDialog;
+    [SupplyParameterFromForm]
+    private Owner? NewOwner { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        OwnerToUpdate = new();
+        NewOwner = new();
+        await GetAllOwnerAsync();
+        await GetAllCarsAsync();
+    }
+
+    private async Task GetAllOwnerAsync()
+    {
+        var ownersResult = await OwnerRepository.GetAllOwnersAsync();
+        owners = ownersResult.ToList();
+    }
+
+    private async Task GetAllCarsAsync()
+    {
+        var carsResult = await CarRepository.GetAllCarsAsync();
+        cars = carsResult.ToList();
+    }
+
+    private async Task GetCarsByOwnerAsync(int ownerId)
+    {
+        ActualOwnerID = ownerId;
+        var carsResult = await CarRepository.GetCarsByOwnerIdAsync(ownerId);
+        CarsOfOwner = carsResult.ToList();
+        CarsOfOwnerDialog?.Open();
+    }
+
+    private async Task RemoveCarFromOwnerAsync(int actualOwnerID, int carID)
+    {
+        await OwnerRepository.RemoveCarFromOwnerAsync(actualOwnerID, carID);
+        await GetCarsByOwnerAsync(actualOwnerID);
+    }
+
+    private async Task AddCarToOwnerAsync(int actualOwnerID, int carID)
+    {
+        await OwnerRepository.AddCarToOwnerAsync(actualOwnerID, carID);
+        await GetCarsByOwnerAsync(actualOwnerID);
+    }
+
+    private void OpenUpdateDialog(Owner ownerToUpdate)
+    {
+        OwnerToUpdate = ownerToUpdate;
+        UpdateOwnerDialog?.Open();
+    }
+
+    private async Task UpdateOwnerAsync()
+    {
+        await OwnerRepository.UpdateOwnerAsync(OwnerToUpdate!);
+        await GetAllOwnerAsync();
+        OwnerToUpdate = new();
+        UpdateOwnerDialog?.Close();
+    }
+
+    private async Task RegisterNewOwnerAsync()
+    {
+        if (NewOwner is not null)
+        {
+            await OwnerRepository.RegisterNewOwnerAsync(NewOwner);
+            await GetAllOwnerAsync();
+            NewOwner = new();
+        }
+
+        AddNewOwnerDialog?.Close();
+    }
+}
